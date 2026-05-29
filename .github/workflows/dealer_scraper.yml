@@ -1,0 +1,56 @@
+name: Dealer Scraper
+
+on:
+  # ── Automatic schedule ───────────────────────────────────────────────────
+  # Every Monday at 07:00 GST (03:00 UTC)
+  # 1st of every month at 07:00 GST (03:00 UTC)
+  schedule:
+    - cron: "0 3 * * 1"       # every Monday
+    - cron: "0 3 1 * *"       # 1st of every month
+
+  # ── Manual trigger (run anytime from GitHub UI) ──────────────────────────
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Reason for manual run (optional)"
+        required: false
+        default: "Manual trigger"
+
+jobs:
+  scrape:
+    name: Run Dealer Scraper
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # 1. Checkout repo
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Set up Python
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # 4. Write the service account JSON from the GitHub secret
+      - name: Write service account key
+        run: echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}' > service_account.json
+
+      # 5. Inject remaining secrets into the script via env vars
+      #    The script reads these at runtime (see CONFIG block)
+      - name: Run scraper
+        env:
+          SPREADSHEET_ID:        ${{ secrets.SPREADSHEET_ID }}
+          APPS_SCRIPT_EMAIL_URL: ${{ secrets.APPS_SCRIPT_EMAIL_URL }}
+        run: python dealer_scraper_combined.py
+
+      # 6. Clean up key file (belt-and-suspenders — runner is ephemeral anyway)
+      - name: Remove service account key
+        if: always()
+        run: rm -f service_account.json
